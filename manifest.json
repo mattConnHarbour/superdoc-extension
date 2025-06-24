@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Download Interceptor & Viewer",
+  "version": "1.0",
+  "description": "Intercepts downloads and displays them in new windows",
+  "permissions": [
+    "downloads",
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["viewer.js"]
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer.html", "viewer.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
