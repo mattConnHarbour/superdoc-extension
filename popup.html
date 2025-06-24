@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SuperDoc Anywhere</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 20px;
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f8f9fa;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+    }
+    
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin: 0;
+    }
+    
+    .toggle-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .toggle-label {
+      font-size: 14px;
+      color: #4a4a4a;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 24px;
+      background: #ddd;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    
+    .toggle-switch.enabled {
+      background: #007bff;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s;
+    }
+    
+    .toggle-switch.enabled .toggle-slider {
+      transform: translateX(24px);
+    }
+    
+    .status {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.webp" alt="SuperDoc Logo" class="logo">
+    <h1 class="title">SuperDoc Anywhere</h1>
+  </div>
+  
+  <div class="toggle-section">
+    <span class="toggle-label">Enable Extension</span>
+    <div class="toggle-switch" id="toggle">
+      <div class="toggle-slider"></div>
+    </div>
+  </div>
+  
+  <div class="status" id="status">Extension is enabled</div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

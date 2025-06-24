@@ -1,68 +1,140 @@
-// Content script for viewer.html
 let superdoc = null;
+let currentFileData = null;
 
-// Listen for blob data from background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'displayFile' && request.data.blob) {
-    console.log('Received blob data:', request.data);
-    
-    // Initialize SuperDoc when DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => initializeSuperdoc(request.data));
-    } else {
-      initializeSuperdoc(request.data);
-    }
-    
-    sendResponse({ success: true });
+// hydrate base64 string to Blob
+function base64ToBlob(base64Data, mimeType) {
+  const bytes = atob(base64Data);
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    array[i] = bytes.charCodeAt(i);
   }
+  return new Blob([array], { type: mimeType });
+}
+
+chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
+  if (request.action !== 'displayFile' || !request.data.base64Data) return;
+  
+  console.log('Received file data from background');
+  
+  const blob = base64ToBlob(request.data.base64Data, request.data.mimeType);
+  const data = { ...request.data, blob };
+  currentFileData = data;
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initSuperdoc(data);
+      setupDownloadButton();
+    });
+  } else {
+    initSuperdoc(data);
+    setupDownloadButton();
+  }
+  
+  // message response
+  sendResponse({ success: true });
 });
 
-function initializeSuperdoc(data) {
-  // convert blob to file blob if needed
-  // convert blob to base64 if needed
-  // const arrayBufferPromise = data.blob.arrayBuffer();
-  // const fileObject = SuperDocLibrary.getFileObject(data.originalUrl, data.filename, data.mimeType);
-  console.log('Initializing SuperDoc with data:', data.blob);
-  // Check if SuperDocLibrary.SuperDoc is available globally
-  if (window.SuperDocLibrary && window.SuperDocLibrary.SuperDoc) {
+async function initSuperdoc(data) {
+  console.log('Initializing SuperDoc');
+  
+  try {
+    if (!window.SuperDocLibrary?.SuperDoc) {
+      console.error('SuperDocLibrary not available');
+      showFallback(data);
+      return;
+    }
+    
+    const file = new File([data.blob], data.filename, { type: data.mimeType });
+    const fileUrl = URL.createObjectURL(file);
+    const superdocFile = await SuperDocLibrary.getFileObject(fileUrl, data.filename, data.mimeType);
+    
     const config = {
       selector: '#superdoc',
-      toolbar: '#my-toolbar',
+      toolbar: '#toolbar',
       documentMode: 'editing',
       pagination: true,
       rulers: true,
-      // document: data.blob,
-      document: data.blob,
-      onReady: (event) => {
-        console.log('SuperDoc is ready', event);
-      },
-      onEditorCreate: (event) => {
-        console.log('Editor is created', event);
-      },
+      document: superdocFile,
+      onReady: () => console.log('SuperDoc ready'),
+      onEditorCreate: () => console.log('Editor created')
     };
     
     superdoc = new SuperDocLibrary.SuperDoc(config);
-  } else {
-    console.error('SuperDocLibrary.SuperDoc not available. Make sure the library is loaded in viewer.html');
-    displayFallbackContent(data);
+    console.log('SuperDoc initialized');
+    
+  } catch (error) {
+    console.error('Error:', error.message);
+    showFallback(data);
   }
 }
 
-function displayFallbackContent(data) {
+// Setup download button functionality
+function setupDownloadButton() {
+  const downloadBtn = document.getElementById('download-btn');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadCurrentFile);
+  }
+}
+
+// Download the current file using Chrome downloads API to prevent triggering extension
+async function downloadCurrentFile() {
+  if (!currentFileData) {
+    console.error('No file data available for download');
+    return;
+  }
+
+  try {
+    console.log('SuperDoc instance:', superdoc);
+    // Export the current document from SuperDoc editor
+    const blobToDownload = await superdoc.activeEditor.exportDocx();
+
+    // Convert blob to data URL for Chrome downloads API with correct MIME type
+    const docxMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const docxBlob = new Blob([blobToDownload], { type: docxMimeType });
+    const dataUrl = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(docxBlob);
+    });
+
+    // Use Chrome downloads API instead of download link to prevent extension trigger
+    let fileName = currentFileData.filename;
+    if (fileName.includes('/') || fileName.includes('\\')) {
+      fileName = fileName.split('/').pop().split('\\').pop();
+    }
+    
+    const downloadId = await chrome.downloads.download({
+      url: dataUrl,
+      filename: fileName,
+      saveAs: true
+    });
+
+    // Notify background script to ignore this download
+    chrome.runtime.sendMessage({
+      action: 'trackViewerDownload',
+      downloadId: downloadId
+    });
+
+    console.log('File download initiated:', fileName, 'ID:', downloadId);
+  } catch (error) {
+    console.error('Error downloading file:', error);
+  }
+}
+
+function showFallback(data) {
+  // for file size presentation - proof that file is real despite failure
   const container = document.getElementById('superdoc') || document.body;
+  const bytes = data.fileSize;
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const formattedSize = bytes === 0 ? '0 B' : Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  
   container.innerHTML = `
     <div style="padding: 20px;">
       <h2>File: ${data.filename}</h2>
-      <p>Size: ${formatFileSize(data.fileSize)}</p>
-      <p>SuperDocLibrary not loaded. Cannot display document content.</p>
+      <p>Size: ${formattedSize}</p>
+      <p>SuperDoc unavailable - cannot display document.</p>
     </div>
   `;
-}
-
-function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }

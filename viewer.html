@@ -1,28 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- <link rel="stylesheet" href="https://unpkg.com/@harbour-enterprises/superdoc@0.11.45/dist/style.css">
-  <script type="module" src="https://unpkg.com/@harbour-enterprises/superdoc@0.11.45/dist/superdoc.umd.js"></script> -->
-  <link rel="stylesheet" href="./lib/superdoc.css">
-  <script src="./lib/superdoc.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SuperDoc Viewer</title>
+  <link rel="stylesheet" href="./lib/superdoc.css">
+  <script src="./lib/superdoc.js"></script>
   <style>
     body {
       display: flex;
       flex-direction: column;
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f8f9fa;
+    }
+    
+    .header {
+      background: white;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+    }
+    
+    .header-text {
+      flex: 1;
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin: 0;
+    }
+    
+    .subtitle {
+      font-size: 12px;
+      color: #666;
+      margin: 2px 0 0 0;
+    }
+    
+    #download-btn {
+      padding: 8px 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    #download-btn:hover {
+      background: #0056b3;
+    }
+    
+    #toolbar {
+      background: white;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 8px 20px;
+    }
+    
+    #superdoc {
+      flex: 1;
+      background: white;
+      display: flex;
+      justify-content: center;
       align-items: center;
     }
   </style>
 </head>
 <body>
-
-  <div id="my-toolbar"></div>
+  <div class="header">
+    <img src="logo.webp" alt="SuperDoc Logo" class="logo">
+    <div class="header-text">
+      <h1 class="title">SuperDoc Anywhere</h1>
+      <p class="subtitle">Powered by the SuperDoc Anywhere extension</p>
+    </div>
+    <button id="download-btn">Download</button>
+  </div>
+  <div id="toolbar"></div>
   <div id="superdoc"></div>
-
-
-  <script src="./viewer.js" type="module"></script>
-
+  <script src="./viewer.js"></script>
 </body>
 </html>

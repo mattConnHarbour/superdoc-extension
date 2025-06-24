@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Download</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        
+        p {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .download-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .note {
+            margin-top: 2rem;
+            padding: 1rem;
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            color: #856404;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Document Download</h1>
+        <p>Click the button below to download the document</p>
+        
+        <button class="download-btn" onclick="downloadFile()">
+            📄 Download DOCX File
+        </button>
+    </div>
+
+    <script>
+        function downloadFile() {
+            // Create a temporary link element
+            const link = document.createElement('a');
+            
+            // Set the file path - replace 'sample-document.docx' with your actual file name
+            link.href = 'https://storage.googleapis.com/superdoc-word-depot/exported2.docx';
+            
+            // Set the download attribute with the desired filename
+            link.download = 'My-Document.docx';
+            
+            // Append to body, click, and remove
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
