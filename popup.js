@@ -31,9 +31,9 @@ toggle.addEventListener('click', () => {
 function updateUI(isEnabled) {
   if (isEnabled) {
     toggle.classList.add('enabled');
-    status.textContent = 'Extension is enabled';
+    status.textContent = 'Enabled';
   } else {
     toggle.classList.remove('enabled');
-    status.textContent = 'Extension is disabled';
+    status.textContent = 'Disabled';
   }
 }

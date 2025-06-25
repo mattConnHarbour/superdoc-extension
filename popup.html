@@ -43,9 +43,21 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     
+    .toggle-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    
     .toggle-label {
       font-size: 14px;
       color: #4a4a4a;
+    }
+    
+    .toggle-status {
+      font-size: 14px;
+      color: #1a1a1a;
+      font-weight: 500;
     }
     
     .toggle-switch {
@@ -77,12 +89,6 @@
       transform: translateX(24px);
     }
     
-    .status {
-      text-align: center;
-      margin-top: 12px;
-      font-size: 12px;
-      color: #666;
-    }
   </style>
 </head>
 <body>
@@ -92,13 +98,13 @@
   </div>
   
   <div class="toggle-section">
-    <span class="toggle-label">Enable Extension</span>
+    <div class="toggle-left">
+      <span class="toggle-status" id="status">Enabled</span>
+    </div>
     <div class="toggle-switch" id="toggle">
       <div class="toggle-slider"></div>
     </div>
   </div>
-  
-  <div class="status" id="status">Extension is enabled</div>
   
   <script src="popup.js"></script>
 </body>
