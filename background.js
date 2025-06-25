@@ -1,9 +1,27 @@
 let viewerDownloadIds = new Set();
 let extensionEnabled = true;
 
-// Load extension state from storage
+// Update extension icon based on enabled state
+function updateIcon(enabled) {
+  const iconPath = enabled ? {
+    "16": "icons/icon-16x16.png",
+    "19": "icons/icon-19x19.png",
+    "48": "icons/icon-48x48.png",
+    "128": "icons/icon-128x128.png"
+  } : {
+    "16": "icons/icon-16x16-disabled.png",
+    "19": "icons/icon-19x19-disabled.png",
+    "48": "icons/icon-48x48-disabled.png",
+    "128": "icons/icon-128x128-disabled.png"
+  };
+  
+  chrome.action.setIcon({ path: iconPath });
+}
+
+// Load extension state from storage and set initial icon
 chrome.storage.sync.get(['extensionEnabled'], (result) => {
   extensionEnabled = result.extensionEnabled !== false; // Default to enabled
+  updateIcon(extensionEnabled);
 });
 
 // Listen for messages
@@ -14,6 +32,7 @@ chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
     sendResponse({ success: true });
   } else if (request.action === 'toggleExtension') {
     extensionEnabled = request.enabled;
+    updateIcon(extensionEnabled);
     console.log('Extension toggled:', extensionEnabled ? 'enabled' : 'disabled');
     sendResponse({ success: true });
   }
