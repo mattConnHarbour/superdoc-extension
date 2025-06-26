@@ -13,7 +13,8 @@
     "downloads",
     "storage",
     "activeTab",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -28,13 +29,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["viewer.js"]
+      "js": ["lib/superdoc.umd.js", "content.js"]
     }
   ],
 
   "web_accessible_resources": [
     {
-      "resources": ["viewer.html", "viewer.js"],
+      "resources": ["icons/logo.webp", "lib/style.css", "lib/superdoc.umd.js", "modal.html"],
       "matches": ["<all_urls>"]
     }
   ]

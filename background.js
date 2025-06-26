@@ -25,7 +25,7 @@ chrome.storage.sync.get(['extensionEnabled'], (result) => {
 });
 
 // Listen for messages
-chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (request.action === 'trackViewerDownload') {
     viewerDownloadIds.add(request.downloadId);
     console.log('Tracking viewer download:', request.downloadId);
@@ -35,6 +35,38 @@ chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
     updateIcon(extensionEnabled);
     console.log('Extension toggled:', extensionEnabled ? 'enabled' : 'disabled');
     sendResponse({ success: true });
+  } else if (request.action === 'executeSuperdocScript') {
+    try {
+      // Execute the SuperDoc library in the sender's tab
+      await chrome.scripting.executeScript({
+        target: { tabId: sender.tab.id },
+        files: ['lib/superdoc.umd.js']
+      });
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error('Error executing SuperDoc script:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true; // Keep message channel open for async response
+  } else if (request.action === 'downloadFile') {
+    try {
+      // Download file using Chrome downloads API
+      const downloadId = await chrome.downloads.download({
+        url: request.url,
+        filename: request.filename,
+        saveAs: true
+      });
+
+      // Track this download to ignore it
+      viewerDownloadIds.add(downloadId);
+      console.log('File download initiated:', request.filename, 'ID:', downloadId);
+      
+      sendResponse({ success: true, downloadId: downloadId });
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true; // Keep message channel open for async response
   }
 });
 
@@ -75,30 +107,22 @@ async function processDownload(downloadId) {
   const blob = await response.blob();
   const base64Data = await blobToBase64(blob);
   
-  // open viewer window
-  const window = await chrome.windows.create({
-    url: chrome.runtime.getURL('viewer.html'),
-    type: 'popup',
-    width: 1000,
-    height: 700
-  });
+  // Get the active tab and send message to content script
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tabs.length === 0) return;
   
-  setTimeout(() => {
-    chrome.tabs.query({ windowId: window.id }, (tabs) => {
-      if (!tabs || tabs.length === 0) return;
-
-      // pass along file to viewer
-      chrome.tabs.sendMessage(tabs[0].id, {
-        action: 'displayFile',
-        data: {
-          filename: download.filename,
-          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          fileSize: download.fileSize,
-          base64Data
-        }
-      });
-    });
-  }, 1000);
+  // Send message to content script to display modal
+  chrome.tabs.sendMessage(tabs[0].id, {
+    action: 'displayFile',
+    data: {
+      filename: download.filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      fileSize: download.fileSize,
+      base64Data
+    }
+  }).catch(error => {
+    console.error('Error sending message to content script:', error);
+  });
 }
 
 // convert blob to string, actual blob was getting dropped on message to viewer.js
