@@ -27,49 +27,69 @@ chrome.storage.sync.get(['extensionEnabled'], (result) => {
   updateIcon(extensionEnabled);
 });
 
+// Message handler functions
+async function handleTrackViewerDownload(request, sender, sendResponse) {
+  viewerDownloadIds.add(request.downloadId);
+  console.log('Tracking viewer download:', request.downloadId);
+  sendResponse({ success: true });
+}
+
+async function handleToggleExtension(request, sender, sendResponse) {
+  extensionEnabled = request.enabled;
+  updateIcon(extensionEnabled);
+  console.log('Extension toggled:', extensionEnabled ? 'enabled' : 'disabled');
+  sendResponse({ success: true });
+}
+
+async function handleExecuteSuperdocScript(request, sender, sendResponse) {
+  try {
+    // Execute the SuperDoc library in the sender's tab
+    await chrome.scripting.executeScript({
+      target: { tabId: sender.tab.id },
+      files: ['lib/superdoc.umd.js']
+    });
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error('Error executing SuperDoc script:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+  return true; // Keep message channel open for async response
+}
+
+async function handleDownloadFile(request, sender, sendResponse) {
+  try {
+    // Download file using Chrome downloads API
+    const downloadId = await chrome.downloads.download({
+      url: request.url,
+      filename: request.filename,
+      saveAs: true
+    });
+
+    // Track this download to ignore it
+    viewerDownloadIds.add(downloadId);
+    console.log('File download initiated:', request.filename, 'ID:', downloadId);
+    
+    sendResponse({ success: true, downloadId: downloadId });
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+  return true; // Keep message channel open for async response
+}
+
+// Action to handler mapping
+const messageHandlers = {
+  'trackViewerDownload': handleTrackViewerDownload,
+  'toggleExtension': handleToggleExtension,
+  'executeSuperdocScript': handleExecuteSuperdocScript,
+  'downloadFile': handleDownloadFile
+};
+
 // Listen for messages
 chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  if (request.action === 'trackViewerDownload') {
-    viewerDownloadIds.add(request.downloadId);
-    console.log('Tracking viewer download:', request.downloadId);
-    sendResponse({ success: true });
-  } else if (request.action === 'toggleExtension') {
-    extensionEnabled = request.enabled;
-    updateIcon(extensionEnabled);
-    console.log('Extension toggled:', extensionEnabled ? 'enabled' : 'disabled');
-    sendResponse({ success: true });
-  } else if (request.action === 'executeSuperdocScript') {
-    try {
-      // Execute the SuperDoc library in the sender's tab
-      await chrome.scripting.executeScript({
-        target: { tabId: sender.tab.id },
-        files: ['lib/superdoc.umd.js']
-      });
-      sendResponse({ success: true });
-    } catch (error) {
-      console.error('Error executing SuperDoc script:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true; // Keep message channel open for async response
-  } else if (request.action === 'downloadFile') {
-    try {
-      // Download file using Chrome downloads API
-      const downloadId = await chrome.downloads.download({
-        url: request.url,
-        filename: request.filename,
-        saveAs: true
-      });
-
-      // Track this download to ignore it
-      viewerDownloadIds.add(downloadId);
-      console.log('File download initiated:', request.filename, 'ID:', downloadId);
-      
-      sendResponse({ success: true, downloadId: downloadId });
-    } catch (error) {
-      console.error('Error downloading file:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true; // Keep message channel open for async response
+  const handler = messageHandlers[request.action];
+  if (handler) {
+    return await handler(request, sender, sendResponse);
   }
 });
 
@@ -101,10 +121,20 @@ async function processDownload(downloadId) {
   const downloads = await chrome.downloads.search({ id: downloadId });
   if (downloads.length === 0) return;
   
-  // docx only
   const download = downloads[0];
-  if (!download.filename.toLowerCase().endsWith('.docx')) return;
+  const filename = download.filename.toLowerCase();
   
+  // Handle DOCX files
+  if (filename.endsWith('.docx')) {
+    await processDocxFile(download);
+  }
+  // Handle Markdown files
+  else if (filename.endsWith('.md') || filename.endsWith('.markdown')) {
+    await processMarkdownFile(download);
+  }
+}
+
+async function processDocxFile(download) {
   // fetch and stringify (actual blob was getting dropped on message to viewer.js)
   const response = await fetch(`file://${download.filename}`);
   const blob = await response.blob();
@@ -138,6 +168,92 @@ async function processDownload(downloadId) {
   }).catch(error => {
     console.error('Error sending message to content script:', error);
   });
+}
+
+async function processMarkdownFile(download) {
+  try {
+    // Fetch the markdown file content
+    const response = await fetch(`file://${download.filename}`);
+    const markdownText = await response.text();
+    
+    // Convert markdown to HTML
+    const htmlContent = markdownToHtml(markdownText);
+    
+    // Get the active tab and send message to content script
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs.length === 0) return;
+    
+    // Send message to content script with HTML content
+    chrome.tabs.sendMessage(tabs[0].id, {
+      action: 'displayMarkdown',
+      data: {
+        filename: download.filename,
+        htmlContent: htmlContent,
+        originalMarkdown: markdownText
+      }
+    }).catch(error => {
+      console.error('Error sending message to content script:', error);
+    });
+  } catch (error) {
+    console.error('Error processing markdown file:', error);
+  }
+}
+
+// Simple markdown to HTML converter
+function markdownToHtml(markdown) {
+  let html = markdown;
+  
+  // Headers
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Bold
+  html = html.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>');
+  html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>');
+  
+  // Italic
+  html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+  html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+  
+  // Code blocks
+  html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
+  
+  // Inline code
+  html = html.replace(/`(.*?)`/gim, '<code>$1</code>');
+  
+  // Links
+  html = html.replace(/\[([^\]]*)\]\(([^\)]*)\)/gim, '<a href="$2">$1</a>');
+  
+  // Images
+  html = html.replace(/!\[([^\]]*)\]\(([^\)]*)\)/gim, '<img alt="$1" src="$2" />');
+  
+  // Lists
+  html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+  html = html.replace(/^\- (.*$)/gim, '<li>$1</li>');
+  html = html.replace(/^\+ (.*$)/gim, '<li>$1</li>');
+  
+  // Wrap consecutive list items in ul tags
+  html = html.replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>');
+  html = html.replace(/<\/ul>\s*<ul>/gim, '');
+  
+  // Line breaks
+  html = html.replace(/\n\n/gim, '</p><p>');
+  html = html.replace(/\n/gim, '<br>');
+  
+  // Wrap in paragraphs
+  html = '<p>' + html + '</p>';
+  
+  // Clean up empty paragraphs
+  html = html.replace(/<p><\/p>/gim, '');
+  html = html.replace(/<p>(<h[1-6]>)/gim, '$1');
+  html = html.replace(/(<\/h[1-6]>)<\/p>/gim, '$1');
+  html = html.replace(/<p>(<ul>)/gim, '$1');
+  html = html.replace(/(<\/ul>)<\/p>/gim, '$1');
+  html = html.replace(/<p>(<pre>)/gim, '$1');
+  html = html.replace(/(<\/pre>)<\/p>/gim, '$1');
+  
+  return html;
 }
 
 // convert blob to string, actual blob was getting dropped on message to viewer.js

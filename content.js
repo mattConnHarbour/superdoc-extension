@@ -80,7 +80,24 @@ async function createModal() {
   // Set the logo source after loading the HTML
   const logoImg = modalContainer.querySelector('#superdoc-anywhere-extension__logo');
   if (logoImg) {
-    logoImg.src = chrome.runtime.getURL('icons/logo.webp');
+    // Try to get the page's favicon from gstatic first
+    const currentDomain = window.location.hostname;
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${currentDomain}&sz=32`;
+    
+    logoImg.src = faviconUrl;
+    
+    // Fallback to extension logo if favicon fails to load
+    logoImg.onerror = () => {
+      logoImg.src = chrome.runtime.getURL('icons/logo.webp');
+    };
+  }
+  
+  // Set the document title
+  const titleElement = modalContainer.querySelector('#superdoc-anywhere-extension__document-title');
+  if (titleElement && currentFileData) {
+    const filename = currentFileData.filename.split('/').pop(); // Get just the filename
+    const title = filename.replace(/\.[^/.]+$/, ""); // Remove file extension
+    titleElement.textContent = title || "Untitled Document";
   }
   
   document.body.appendChild(modalContainer);
@@ -238,29 +255,121 @@ function showFallback(data) {
   `;
 }
 
+// Initialize SuperDoc with HTML content for markdown files
+async function initSuperdocWithHTML(data) {
+  console.log('Initializing SuperDoc with HTML content');
+  
+  try {
+    if (!window.SuperDocLibrary?.SuperDoc) {
+      console.error('SuperDocLibrary not available');
+      showMarkdownFallback(data);
+      return;
+    }
+    
+    // Create a simple HTML document structure
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${data.filename}</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; margin: 40px; line-height: 1.6; }
+          h1, h2, h3 { color: #333; }
+          code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+          pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+          blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; }
+        </style>
+      </head>
+      <body>
+        ${data.htmlContent}
+      </body>
+      </html>
+    `;
+    
+    
+    const config = {
+      selector: '#superdoc-anywhere-extension__viewer',
+      documentMode: 'editing',
+      pagination: true,
+      rulers: true,
+      mode: 'html',
+      content: htmlContent,
+      onReady: () => console.log('SuperDoc ready with HTML content'),
+      onEditorCreate: () => console.log('Editor created with HTML content')
+    };
+    
+    superdoc = new SuperDocLibrary.Editor(config);
+    console.log('SuperDoc initialized with HTML content');
+
+    // const toolbar = new SuperDocLibrary.SuperToolbar({ element: 'superdoc-anywhere-extension__toolbar', editor: superdoc, isDev: true, pagination: true, });
+    
+  } catch (error) {
+    console.error('Error initializing SuperDoc with HTML:', error.message);
+    showMarkdownFallback(data);
+  }
+}
+
+// Show fallback content for markdown files
+function showMarkdownFallback(data) {
+  const container = modalContainer.querySelector('#superdoc-anywhere-extension__viewer');
+  
+  container.innerHTML = `
+    <div style="padding: 20px; font-family: system-ui, -apple-system, sans-serif; max-height: 500px; overflow-y: auto;">
+      <h2 style="margin: 0 0 20px 0; color: #333;">Markdown File: ${data.filename}</h2>
+      <div style="border: 1px solid #ddd; border-radius: 5px; padding: 20px; background: #f9f9f9;">
+        ${data.htmlContent}
+      </div>
+      <p style="margin: 20px 0 0 0; color: #666; font-size: 14px;">SuperDoc unavailable - showing converted HTML content.</p>
+    </div>
+  `;
+}
+
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener(async (request, _, sendResponse) => {
-  if (request.action !== 'displayFile' || !request.data.base64Data) return;
-  
-  console.log('Received file data from background, displaying in modal');
-  
-  const blob = base64ToBlob(request.data.base64Data, request.data.mimeType);
-  const data = { ...request.data, blob };
-  currentFileData = data;
-  
-  // Load SuperDoc library
-  const [superdocLoaded, loadError] = await loadSuperDoc();
-  if (!superdocLoaded) {
-    console.error('Failed to load SuperDoc library:', loadError);
+  // Handle DOCX files
+  if (request.action === 'displayFile' && request.data.base64Data) {
+    console.log('Received DOCX file data from background, displaying in modal');
+    
+    const blob = base64ToBlob(request.data.base64Data, request.data.mimeType);
+    const data = { ...request.data, blob };
+    currentFileData = data;
+    
+    // Load SuperDoc library
+    const [superdocLoaded, loadError] = await loadSuperDoc();
+    if (!superdocLoaded) {
+      console.error('Failed to load SuperDoc library:', loadError);
+    }
+    
+    // Create and show modal
+    await createModal();
+    showModal();
+    
+    // Initialize SuperDoc
+    await initSuperdoc(data);
+    
+    sendResponse({ success: true });
   }
   
-  // Create and show modal
-  await createModal();
-  showModal();
-  
-  // Initialize SuperDoc
-  await initSuperdoc(data);
-  
-  // Send response
-  sendResponse({ success: true });
+  // Handle Markdown files
+  else if (request.action === 'displayMarkdown' && request.data.htmlContent) {
+    console.log('Received markdown file data from background, displaying in modal');
+    
+    currentFileData = request.data;
+    
+    // Load SuperDoc library
+    const [superdocLoaded, loadError] = await loadSuperDoc();
+    if (!superdocLoaded) {
+      console.error('Failed to load SuperDoc library:', loadError);
+    }
+    
+    // Create and show modal
+    await createModal();
+    showModal();
+    
+    // Initialize SuperDoc with HTML content
+    await initSuperdocWithHTML(request.data);
+    
+    sendResponse({ success: true });
+  }
 });

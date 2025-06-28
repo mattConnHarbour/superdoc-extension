@@ -197,9 +197,13 @@ function validateAndCorrectStructure(documentXml) {
       });
     }
     
-    // Ensure page margins
+    // Ensure page margins and size
     if (!body["w:sectPr"]) {
       body["w:sectPr"] = {
+        "w:pgSz": {
+          "@_w:w": "12240",    // 8.5 inches = 12240 twips
+          "@_w:h": "15840"     // 11 inches = 15840 twips (US Letter)
+        },
         "w:pgMar": {
           "@_w:top": "1440",
           "@_w:right": "1440", 
@@ -210,22 +214,39 @@ function validateAndCorrectStructure(documentXml) {
           "@_w:gutter": "0"
         }
       };
-    } else if (!body["w:sectPr"]["w:pgMar"]) {
-      body["w:sectPr"]["w:pgMar"] = {
-        "@_w:top": "1440",
-        "@_w:right": "1440",
-        "@_w:bottom": "1440", 
-        "@_w:left": "1440",
-        "@_w:header": "720",
-        "@_w:footer": "720",
-        "@_w:gutter": "0"
-      };
     } else {
-      const pgMar = body["w:sectPr"]["w:pgMar"];
-      if (!pgMar["@_w:top"]) pgMar["@_w:top"] = "1440";
-      if (!pgMar["@_w:right"]) pgMar["@_w:right"] = "1440";
-      if (!pgMar["@_w:bottom"]) pgMar["@_w:bottom"] = "1440";
-      if (!pgMar["@_w:left"]) pgMar["@_w:left"] = "1440";
+      const sectPr = body["w:sectPr"];
+      
+      // Ensure page size
+      if (!sectPr["w:pgSz"]) {
+        sectPr["w:pgSz"] = {
+          "@_w:w": "12240",    // 8.5 inches = 12240 twips
+          "@_w:h": "15840"     // 11 inches = 15840 twips (US Letter)
+        };
+      } else {
+        const pgSz = sectPr["w:pgSz"];
+        if (!pgSz["@_w:w"]) pgSz["@_w:w"] = "12240";
+        if (!pgSz["@_w:h"]) pgSz["@_w:h"] = "15840";
+      }
+      
+      // Ensure page margins
+      if (!sectPr["w:pgMar"]) {
+        sectPr["w:pgMar"] = {
+          "@_w:top": "1440",
+          "@_w:right": "1440",
+          "@_w:bottom": "1440", 
+          "@_w:left": "1440",
+          "@_w:header": "720",
+          "@_w:footer": "720",
+          "@_w:gutter": "0"
+        };
+      } else {
+        const pgMar = sectPr["w:pgMar"];
+        if (!pgMar["@_w:top"]) pgMar["@_w:top"] = "1440";
+        if (!pgMar["@_w:right"]) pgMar["@_w:right"] = "1440";
+        if (!pgMar["@_w:bottom"]) pgMar["@_w:bottom"] = "1440";
+        if (!pgMar["@_w:left"]) pgMar["@_w:left"] = "1440";
+      }
     }
     
     return builder.build(doc);
