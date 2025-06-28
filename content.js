@@ -18,20 +18,20 @@ async function loadModalHTML() {
 
 // Inject CSS for modal
 function injectModalCSS() {
-  if (document.getElementById('superdoc-modal-css')) return;
+  if (document.getElementById('superdoc-anywhere-extension__modal-css')) return;
   
   const style = document.createElement('style');
-  style.id = 'superdoc-modal-css';
+  style.id = 'superdoc-anywhere-extension__modal-css';
   style.textContent = `
-    #superdoc-modal * {
+    #superdoc-anywhere-extension__modal * {
       box-sizing: border-box;
     }
     
-    #superdoc-download-btn:hover {
+    #superdoc-anywhere-extension__download-btn:hover {
       background: #0056b3 !important;
     }
     
-    #superdoc-close-btn:hover {
+    #superdoc-anywhere-extension__close-btn:hover {
       background: #545b62 !important;
     }
   `;
@@ -78,7 +78,7 @@ async function createModal() {
   modalContainer = div.firstElementChild;
   
   // Set the logo source after loading the HTML
-  const logoImg = modalContainer.querySelector('#superdoc-logo');
+  const logoImg = modalContainer.querySelector('#superdoc-anywhere-extension__logo');
   if (logoImg) {
     logoImg.src = chrome.runtime.getURL('icons/logo.webp');
   }
@@ -86,8 +86,8 @@ async function createModal() {
   document.body.appendChild(modalContainer);
   
   // Setup event listeners
-  const closeBtn = modalContainer.querySelector('#superdoc-close-btn');
-  const downloadBtn = modalContainer.querySelector('#superdoc-download-btn');
+  const closeBtn = modalContainer.querySelector('#superdoc-anywhere-extension__close-btn');
+  const downloadBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-btn');
   
   closeBtn.addEventListener('click', closeModal);
   downloadBtn.addEventListener('click', downloadCurrentFile);
@@ -157,8 +157,8 @@ async function initSuperdoc(data) {
     const superdocFile = await SuperDocLibrary.getFileObject(fileUrl, data.filename, data.mimeType);
     
     const config = {
-      selector: '#superdoc-viewer',
-      toolbar: '#superdoc-toolbar',
+      selector: '#superdoc-anywhere-extension__viewer',
+      toolbar: '#superdoc-anywhere-extension__toolbar',
       documentMode: 'editing',
       pagination: true,
       rulers: true,
@@ -222,7 +222,7 @@ async function downloadCurrentFile() {
 
 // Show fallback content
 function showFallback(data) {
-  const container = modalContainer.querySelector('#superdoc-viewer');
+  const container = modalContainer.querySelector('#superdoc-anywhere-extension__viewer');
   const bytes = data.fileSize;
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];

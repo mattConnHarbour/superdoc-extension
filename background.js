@@ -1,6 +1,9 @@
 let viewerDownloadIds = new Set();
 let extensionEnabled = true;
 
+// Import the bundled docx validator
+importScripts('dist/docx-validator.bundle.js');
+
 // Update extension icon based on enabled state
 function updateIcon(enabled) {
   const iconPath = enabled ? {
@@ -105,7 +108,19 @@ async function processDownload(downloadId) {
   // fetch and stringify (actual blob was getting dropped on message to viewer.js)
   const response = await fetch(`file://${download.filename}`);
   const blob = await response.blob();
-  const base64Data = await blobToBase64(blob);
+  
+  // Validate and correct the DOCX file
+  let correctedBlob = blob;
+  try {
+    console.log('Validating and correcting DOCX file...');
+    correctedBlob = await DocxValidator.validateAndCorrectDocx(blob);
+    console.log('DOCX validation and correction completed');
+  } catch (error) {
+    console.error('Error validating DOCX:', error);
+    // Continue with original blob if validation fails
+  }
+  
+  const base64Data = await blobToBase64(correctedBlob);
   
   // Get the active tab and send message to content script
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -117,7 +132,7 @@ async function processDownload(downloadId) {
     data: {
       filename: download.filename,
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      fileSize: download.fileSize,
+      fileSize: correctedBlob.size,
       base64Data
     }
   }).catch(error => {
