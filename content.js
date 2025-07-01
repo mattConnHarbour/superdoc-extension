@@ -135,14 +135,8 @@ async function createModal() {
 // Close modal
 function closeModal() {
   if (modalContainer) {
-    if (superdoc) {
-      try {
-        superdoc.destroy();
-      } catch (error) {
-        console.log('Error destroying SuperDoc:', error);
-      }
-      superdoc = null;
-    }
+    superdoc = null;
+
     // Remove modal from DOM completely
     modalContainer.remove();
     modalContainer = null;
@@ -157,15 +151,6 @@ function showModal() {
   }
 }
 
-// Convert base64 to blob
-function base64ToBlob(base64Data, mimeType) {
-  const bytes = atob(base64Data);
-  const array = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) {
-    array[i] = bytes.charCodeAt(i);
-  }
-  return new Blob([array], { type: mimeType });
-}
 
 // Initialize SuperDoc in modal
 async function initSuperdoc(data) {
@@ -347,104 +332,127 @@ function showMarkdownFallback(data) {
   `;
 }
 
+// Handle selected HTML capture
+async function handleCaptureSelectedHTML(request, sendResponse) {
+  console.log('Capturing selected HTML for SuperDoc');
+  
+  // Get the current selection
+  const selection = window.getSelection();
+  if (selection && selection.rangeCount > 0) {
+    try {
+      // Get the range of the selection
+      const range = selection.getRangeAt(0);
+      
+      // Extract the HTML content of the selection
+      const tempDiv = document.createElement('div');
+      tempDiv.appendChild(range.cloneContents());
+      const htmlContent = tempDiv.innerHTML;
+      
+      console.log('Captured HTML:', htmlContent);
+      
+      // Create data object similar to markdown processing
+      const currentDomain = window.location.hostname;
+      const data = {
+        filename: `Selected content from ${currentDomain}.html`,
+        htmlContent: htmlContent,
+        originalSource: 'webpage_selection'
+      };
+      
+      // Store as current file data
+      currentFileData = data;
+      
+      // Load SuperDoc library
+      await loadSuperDoc();
+      
+      // Create and show modal
+      await createModal();
+      showModal();
+      
+      // Initialize SuperDoc with HTML content
+      await initSuperdocWithHTML(data);
+      
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error('Error capturing HTML:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+  } else {
+    console.error('No selection found');
+    alert('No selection found.');
+    sendResponse({ success: false, error: 'No selection found' });
+  }
+  
+  return true;
+}
+
+// Handle DOCX files
+async function handleDisplayFile(request, sendResponse) {
+  if (!request.data.base64Data) return false;
+  
+  console.log('Received DOCX file data from background, displaying in modal');
+  
+  const bytes = atob(request.data.base64Data);
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    array[i] = bytes.charCodeAt(i);
+  }
+  const blob = new Blob([array], { type: request.data.mimeType });
+  const data = { ...request.data, blob };
+  currentFileData = data;
+  
+  // Load SuperDoc library
+  const [superdocLoaded, loadError] = await loadSuperDoc();
+  if (!superdocLoaded) {
+    console.error('Failed to load SuperDoc library:', loadError);
+  }
+  
+  // Create and show modal
+  await createModal();
+  showModal();
+  
+  // Initialize SuperDoc
+  await initSuperdoc(data);
+  
+  sendResponse({ success: true });
+  return true;
+}
+
+// Handle Markdown files
+async function handleDisplayMarkdown(request, sendResponse) {
+  if (!request.data.htmlContent) return false;
+  
+  console.log('Received markdown file data from background, displaying in modal');
+  
+  currentFileData = request.data;
+  
+  // Load SuperDoc library
+  const [superdocLoaded, loadError] = await loadSuperDoc();
+  if (!superdocLoaded) {
+    console.error('Failed to load SuperDoc library:', loadError);
+  }
+  
+  // Create and show modal
+  await createModal();
+  showModal();
+  
+  // Initialize SuperDoc with HTML content
+  await initSuperdocWithHTML(request.data);
+  
+  sendResponse({ success: true });
+  return true;
+}
+
+// Action to handler mapping
+const messageHandlers = {
+  'captureSelectedHTML': handleCaptureSelectedHTML,
+  'displayFile': handleDisplayFile,
+  'displayMarkdown': handleDisplayMarkdown
+};
+
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener(async (request, _, sendResponse) => {
-  // Handle selected HTML capture
-  if (request.action === 'captureSelectedHTML') {
-    console.log('Capturing selected HTML for SuperDoc');
-    
-    // Get the current selection
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      try {
-        // Get the range of the selection
-        const range = selection.getRangeAt(0);
-        
-        // Extract the HTML content of the selection
-        const tempDiv = document.createElement('div');
-        tempDiv.appendChild(range.cloneContents());
-        const htmlContent = tempDiv.innerHTML;
-        
-        console.log('Captured HTML:', htmlContent);
-        
-        // Create data object similar to markdown processing
-        const currentDomain = window.location.hostname;
-        const data = {
-          filename: `Selected content from ${currentDomain}.html`,
-          htmlContent: htmlContent,
-          originalSource: 'webpage_selection'
-        };
-        
-        // Store as current file data
-        currentFileData = data;
-        
-        // Load SuperDoc library
-        await loadSuperDoc();
-        
-        // Create and show modal
-        await createModal();
-        showModal();
-        
-        // Initialize SuperDoc with HTML content
-        await initSuperdocWithHTML(data);
-        
-        sendResponse({ success: true });
-      } catch (error) {
-        console.error('Error capturing HTML:', error);
-        sendResponse({ success: false, error: error.message });
-      }
-    } else {
-      console.error('No selection found');
-      alert('No selection found.');
-      sendResponse({ success: false, error: 'No selection found' });
-    }
-    
-    return true;
-  }
-  
-  // Handle DOCX files
-  if (request.action === 'displayFile' && request.data.base64Data) {
-    console.log('Received DOCX file data from background, displaying in modal');
-    
-    const blob = base64ToBlob(request.data.base64Data, request.data.mimeType);
-    const data = { ...request.data, blob };
-    currentFileData = data;
-    
-    // Load SuperDoc library
-    const [superdocLoaded, loadError] = await loadSuperDoc();
-    if (!superdocLoaded) {
-      console.error('Failed to load SuperDoc library:', loadError);
-    }
-    
-    // Create and show modal
-    await createModal();
-    showModal();
-    
-    // Initialize SuperDoc
-    await initSuperdoc(data);
-    
-    sendResponse({ success: true });
-  }
-  
-  // Handle Markdown files
-  else if (request.action === 'displayMarkdown' && request.data.htmlContent) {
-    console.log('Received markdown file data from background, displaying in modal');
-    
-    currentFileData = request.data;
-    
-    // Load SuperDoc library
-    const [superdocLoaded, loadError] = await loadSuperDoc();
-    if (!superdocLoaded) {
-      console.error('Failed to load SuperDoc library:', loadError);
-    }
-    
-    // Create and show modal
-    await createModal();
-    showModal();
-    
-    // Initialize SuperDoc with HTML content
-    await initSuperdocWithHTML(request.data);
-    
-    sendResponse({ success: true });
+  const handler = messageHandlers[request.action];
+  if (handler) {
+    return await handler(request, sendResponse);
   }
 });

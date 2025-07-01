@@ -6,16 +6,12 @@ importScripts('dist/docx-validator.bundle.js');
 
 // Update extension icon based on enabled state
 function updateIcon(enabled) {
-  const iconPath = enabled ? {
-    "16": "icons/icon-16x16.png",
-    "19": "icons/icon-19x19.png",
-    "48": "icons/icon-48x48.png",
-    "128": "icons/icon-128x128.png"
-  } : {
-    "16": "icons/icon-16x16-disabled.png",
-    "19": "icons/icon-19x19-disabled.png",
-    "48": "icons/icon-48x48-disabled.png",
-    "128": "icons/icon-128x128-disabled.png"
+  const suffix = enabled ? '' : '-disabled';
+  const iconPath = {
+    "16": `icons/icon-16x16${suffix}.png`,
+    "19": `icons/icon-19x19${suffix}.png`,
+    "48": `icons/icon-48x48${suffix}.png`,
+    "128": `icons/icon-128x128${suffix}.png`
   };
   
   chrome.action.setIcon({ path: iconPath });
@@ -36,33 +32,11 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Message handler functions
-async function handleTrackViewerDownload(request, sender, sendResponse) {
-  viewerDownloadIds.add(request.downloadId);
-  console.log('Tracking viewer download:', request.downloadId);
-  sendResponse({ success: true });
-}
-
 async function handleToggleExtension(request, sender, sendResponse) {
   extensionEnabled = request.enabled;
   updateIcon(extensionEnabled);
   console.log('Extension toggled:', extensionEnabled ? 'enabled' : 'disabled');
   sendResponse({ success: true });
-}
-
-async function handleExecuteSuperdocScript(request, sender, sendResponse) {
-  try {
-    // Execute the SuperDoc library in the sender's tab
-    await chrome.scripting.executeScript({
-      target: { tabId: sender.tab.id },
-      files: ['lib/superdoc.umd.js']
-    });
-    sendResponse({ success: true });
-  } catch (error) {
-    console.error('Error executing SuperDoc script:', error);
-    sendResponse({ success: false, error: error.message });
-  }
-  return true; // Keep message channel open for async response
 }
 
 async function handleDownloadFile(request, sender, sendResponse) {
@@ -74,7 +48,7 @@ async function handleDownloadFile(request, sender, sendResponse) {
       saveAs: true
     });
 
-    // Track this download to ignore it
+    // Track this download to ignore it if downloaded from viewer
     viewerDownloadIds.add(downloadId);
     console.log('File download initiated:', request.filename, 'ID:', downloadId);
     
@@ -86,18 +60,10 @@ async function handleDownloadFile(request, sender, sendResponse) {
   return true; // Keep message channel open for async response
 }
 
-async function handleLogSelectedText(request, sender, sendResponse) {
-  console.log('Selected text:', request.selectedText);
-  sendResponse({ success: true });
-}
-
 // Action to handler mapping
 const messageHandlers = {
-  'trackViewerDownload': handleTrackViewerDownload,
   'toggleExtension': handleToggleExtension,
-  'executeSuperdocScript': handleExecuteSuperdocScript,
   'downloadFile': handleDownloadFile,
-  'logSelectedText': handleLogSelectedText
 };
 
 // Listen for messages
@@ -180,7 +146,12 @@ async function processDocxFile(download) {
     // Continue with original blob if validation fails
   }
   
-  const base64Data = await blobToBase64(correctedBlob);
+  const base64Data = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(correctedBlob);
+  });
   
   // Get the active tab and send message to content script
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -284,14 +255,4 @@ function markdownToHtml(markdown) {
   html = html.replace(/(<\/pre>)<\/p>/gim, '$1');
   
   return html;
-}
-
-// convert blob to string, actual blob was getting dropped on message to viewer.js
-async function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }
