@@ -1,0 +1,125 @@
+#superdoc-anywhere-extension__modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#superdoc-anywhere-extension__modal-content {
+  background: white;
+  width: 90%;
+  height: 90%;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#superdoc-anywhere-extension__header {
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+#superdoc-anywhere-extension__logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+
+#superdoc-anywhere-extension__header > div {
+  flex: 1;
+}
+
+#superdoc-anywhere-extension__document-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#superdoc-anywhere-extension__header p {
+  font-size: 12px;
+  color: #666;
+  margin: 2px 0 0 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#superdoc-anywhere-extension__download-btn {
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#superdoc-anywhere-extension__download-btn:hover {
+  background: #0056b3;
+}
+
+#superdoc-anywhere-extension__close-btn {
+  padding: 8px 12px;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 8px;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#superdoc-anywhere-extension__close-btn:hover {
+  background: #545b62;
+}
+
+#superdoc-anywhere-extension__toolbar {
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 8px 20px;
+}
+
+#superdoc-anywhere-extension__docx-viewer {
+  flex: 1;
+  background: white;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+}
+
+#superdoc-anywhere-extension__markdown-viewer {
+  flex: 1;
+  background: white;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+}
+
+.sd-super-editor-html .ProseMirror {
+  max-width: 8in;
+  height: auto !important;
+  padding: 1in;
+}

@@ -66,6 +66,12 @@ async function createModal() {
   
   injectModalCSS();
   
+  // Load external modal CSS
+  const modalCssLink = document.createElement('link');
+  modalCssLink.rel = 'stylesheet';
+  modalCssLink.href = chrome.runtime.getURL('modal.css');
+  document.head.appendChild(modalCssLink);
+  
   // Load modal HTML from file
   const modalHTML = await loadModalHTML();
   if (!modalHTML) {
@@ -129,7 +135,6 @@ async function createModal() {
 // Close modal
 function closeModal() {
   if (modalContainer) {
-    modalContainer.style.display = 'none';
     if (superdoc) {
       try {
         superdoc.destroy();
@@ -138,6 +143,10 @@ function closeModal() {
       }
       superdoc = null;
     }
+    // Remove modal from DOM completely
+    modalContainer.remove();
+    modalContainer = null;
+    currentFileData = null;
   }
 }
 
@@ -174,7 +183,7 @@ async function initSuperdoc(data) {
     const superdocFile = await SuperDocLibrary.getFileObject(fileUrl, data.filename, data.mimeType);
     
     const config = {
-      selector: '#superdoc-anywhere-extension__viewer',
+      selector: '#superdoc-anywhere-extension__docx-viewer',
       toolbar: '#superdoc-anywhere-extension__toolbar',
       documentMode: 'editing',
       pagination: true,
@@ -185,6 +194,11 @@ async function initSuperdoc(data) {
     };
     
     superdoc = new SuperDocLibrary.SuperDoc(config);
+    // unhide selector
+    const viewerElement = modalContainer.querySelector('#superdoc-anywhere-extension__docx-viewer');
+    if (viewerElement) {
+      viewerElement.style.display = 'flex';
+    }
     console.log('SuperDoc initialized in modal');
     
   } catch (error) {
@@ -289,18 +303,26 @@ async function initSuperdocWithHTML(data) {
     
     
     const config = {
-      selector: '#superdoc-anywhere-extension__viewer',
+      selector: '#superdoc-anywhere-extension__markdown-viewer',
       documentMode: 'editing',
       pagination: true,
       rulers: true,
       mode: 'html',
       content: htmlContent,
       onReady: () => console.log('SuperDoc ready with HTML content'),
-      onEditorCreate: () => console.log('Editor created with HTML content')
+      onEditorCreate: () => console.log('Editor created with HTML content'),
+      converter: SuperDocLibrary.SuperConverter
     };
     
     superdoc = new SuperDocLibrary.Editor(config);
+    // unhide selector
+    const viewerElement = modalContainer.querySelector('#superdoc-anywhere-extension__markdown-viewer');
+    if (viewerElement) {
+      viewerElement.style.display = 'flex';
+    }
     console.log('SuperDoc initialized with HTML content');
+
+    // TODO - toolbar
 
     // const toolbar = new SuperDocLibrary.SuperToolbar({ element: 'superdoc-anywhere-extension__toolbar', editor: superdoc, isDev: true, pagination: true, });
     

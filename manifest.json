@@ -35,7 +35,7 @@
 
   "web_accessible_resources": [
     {
-      "resources": ["icons/logo.webp", "lib/style.css", "lib/superdoc.umd.js", "modal.html", "dist/docx-validator.bundle.js"],
+      "resources": ["icons/logo.webp", "lib/style.css", "lib/superdoc.umd.js", "modal.html", "modal.css", "dist/docx-validator.bundle.js"],
       "matches": ["<all_urls>"]
     }
   ]
