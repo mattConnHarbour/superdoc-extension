@@ -27,6 +27,15 @@ chrome.storage.sync.get(['extensionEnabled'], (result) => {
   updateIcon(extensionEnabled);
 });
 
+// Create context menu on installation
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "openSelectedInSuperdoc",
+    title: "Open selected content in SuperDoc",
+    contexts: ["selection"]
+  });
+});
+
 // Message handler functions
 async function handleTrackViewerDownload(request, sender, sendResponse) {
   viewerDownloadIds.add(request.downloadId);
@@ -77,12 +86,18 @@ async function handleDownloadFile(request, sender, sendResponse) {
   return true; // Keep message channel open for async response
 }
 
+async function handleLogSelectedText(request, sender, sendResponse) {
+  console.log('Selected text:', request.selectedText);
+  sendResponse({ success: true });
+}
+
 // Action to handler mapping
 const messageHandlers = {
   'trackViewerDownload': handleTrackViewerDownload,
   'toggleExtension': handleToggleExtension,
   'executeSuperdocScript': handleExecuteSuperdocScript,
-  'downloadFile': handleDownloadFile
+  'downloadFile': handleDownloadFile,
+  'logSelectedText': handleLogSelectedText
 };
 
 // Listen for messages
@@ -90,6 +105,21 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   const handler = messageHandlers[request.action];
   if (handler) {
     return await handler(request, sender, sendResponse);
+  }
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "openSelectedInSuperdoc" && info.selectionText) {
+    // Send message to content script to capture HTML and open in SuperDoc
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        action: 'captureSelectedHTML',
+        selectedText: info.selectionText
+      });
+    } catch (error) {
+      console.error('Error sending message to content script:', error);
+    }
   }
 });
 

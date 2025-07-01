@@ -349,6 +349,59 @@ function showMarkdownFallback(data) {
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener(async (request, _, sendResponse) => {
+  // Handle selected HTML capture
+  if (request.action === 'captureSelectedHTML') {
+    console.log('Capturing selected HTML for SuperDoc');
+    
+    // Get the current selection
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      try {
+        // Get the range of the selection
+        const range = selection.getRangeAt(0);
+        
+        // Extract the HTML content of the selection
+        const tempDiv = document.createElement('div');
+        tempDiv.appendChild(range.cloneContents());
+        const htmlContent = tempDiv.innerHTML;
+        
+        console.log('Captured HTML:', htmlContent);
+        
+        // Create data object similar to markdown processing
+        const currentDomain = window.location.hostname;
+        const data = {
+          filename: `Selected content from ${currentDomain}.html`,
+          htmlContent: htmlContent,
+          originalSource: 'webpage_selection'
+        };
+        
+        // Store as current file data
+        currentFileData = data;
+        
+        // Load SuperDoc library
+        await loadSuperDoc();
+        
+        // Create and show modal
+        await createModal();
+        showModal();
+        
+        // Initialize SuperDoc with HTML content
+        await initSuperdocWithHTML(data);
+        
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('Error capturing HTML:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    } else {
+      console.error('No selection found');
+      alert('No selection found.');
+      sendResponse({ success: false, error: 'No selection found' });
+    }
+    
+    return true;
+  }
+  
   // Handle DOCX files
   if (request.action === 'displayFile' && request.data.base64Data) {
     console.log('Received DOCX file data from background, displaying in modal');
