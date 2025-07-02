@@ -9,17 +9,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#superdoc-anywhere-extension__modal::-webkit-scrollbar {
+  display: none;
 }
 
 #superdoc-anywhere-extension__modal-content {
   background: white;
-  width: 90%;
-  height: 90%;
+  width: 95vw;
+  height: 90vh;
+  max-width: 95vw;
+  max-height: 90vh;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  margin: auto;
 }
 
 #superdoc-anywhere-extension__header {
@@ -48,6 +58,7 @@
   color: #1a1a1a;
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
+  border: none;
 }
 
 #superdoc-anywhere-extension__header p {
@@ -116,6 +127,10 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px;
+}
+
+#superdoc-anywhere-extension__markdown-viewer > .ProseMirror {
+  min-height: 11in;
 }
 
 .sd-super-editor-html .ProseMirror {
