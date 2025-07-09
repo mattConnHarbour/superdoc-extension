@@ -50,7 +50,6 @@ openSelectedTextBtn.addEventListener('click', async () => {
       
       // Close popup after successful action
       window.close();
-      
     } catch (error) {
       console.error('Error opening selected text:', error);
       alert('Error: ' + error.message);

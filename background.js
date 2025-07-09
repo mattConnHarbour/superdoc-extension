@@ -23,7 +23,7 @@ chrome.storage.sync.get(['extensionEnabled'], (result) => {
   updateIcon(extensionEnabled);
 });
 
-// Create context menu on installation
+// Create context menu on installation for selecting text
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "openSelectedInSuperdoc",
@@ -32,6 +32,7 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// enable/disable extension via extension popup
 async function handleToggleExtension(request, sender, sendResponse) {
   extensionEnabled = request.enabled;
   updateIcon(extensionEnabled);
@@ -39,7 +40,16 @@ async function handleToggleExtension(request, sender, sendResponse) {
   sendResponse({ success: true });
 }
 
-async function handleDownloadFile(request, sender, sendResponse) {
+/**
+ * Handles file download requests from the extension
+ * @param {Object} request - The download request object
+ * @param {string} request.url - The URL of the file to download
+ * @param {string} request.filename - The desired filename for the downloaded file
+ * @param {Object} sender - The sender information from Chrome runtime
+ * @param {Function} sendResponse - Callback function to send response back to sender
+ * @returns {boolean} Returns true to keep message channel open for async response
+ */
+async function handleDownloadFile(request, _sender, sendResponse) {
   try {
     // Download file using Chrome downloads API
     const downloadId = await chrome.downloads.download({
@@ -69,74 +79,96 @@ const messageHandlers = {
 // Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handler = messageHandlers[request.action];
-  if (handler) {
-    handler(request, sender, sendResponse);
-    return true; // Keep message channel open for async response
-  }
+  if (!handler) return false;
+
+  handler(request, sender, sendResponse);
+  return true;
 });
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "openSelectedInSuperdoc" && info.selectionText) {
-    // Send message to content script to capture HTML and open in SuperDoc
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'captureSelectedHTML',
-        selectedText: info.selectionText
-      });
-    } catch (error) {
-      console.error('Error sending message to content script:', error);
-    }
+  if (!(info.menuItemId === "openSelectedInSuperdoc" && info.selectionText)) return;
+
+  // Send message to content script to capture HTML and open in SuperDoc
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      action: 'captureSelectedHTML',
+      selectedText: info.selectionText
+    });
+  } catch (error) {
+    console.error('Error sending message to content script:', error);
   }
 });
 
 // chrome download event listener (on download completion, so writes to disk first)
 chrome.downloads.onChanged.addListener(async (downloadDelta) => {
-  if (downloadDelta.state?.current === 'complete') {
-    // Check if extension is disabled
-    if (!extensionEnabled) {
-      console.log('Extension disabled, ignoring download');
-      return;
-    }
-    
-    // Check if this is a download from viewer - if so, ignore it
-    if (viewerDownloadIds.has(downloadDelta.id)) {
-      viewerDownloadIds.delete(downloadDelta.id);
-      console.log('Ignoring viewer download completion:', downloadDelta.id);
-      return;
-    }
-    
-    try {
-      await processDownload(downloadDelta.id);
-    } catch (error) {
-      console.error('Error processing download:', error);
-    }
+  if (downloadDelta.state?.current !== 'complete') return;
+
+  // Check if extension is disabled
+  if (!extensionEnabled) {
+    console.log('Extension disabled, ignoring download');
+    return;
+  }
+  
+  // Check if this is a download from viewer - if so, ignore it, otherwise we get endless loop of opening modals
+  if (viewerDownloadIds.has(downloadDelta.id)) {
+    viewerDownloadIds.delete(downloadDelta.id);
+    console.log('Ignoring viewer download completion:', downloadDelta.id);
+    return;
+  }
+  
+  try {
+    await processDownload(downloadDelta.id);
+  } catch (error) {
+    console.error('Error processing download:', error);
   }
 });
 
-async function processDownload(downloadId) {
-  const downloads = await chrome.downloads.search({ id: downloadId });
-  if (downloads.length === 0) return;
-  
-  const download = downloads[0];
-  const filename = download.filename.toLowerCase();
-  
-  // Handle DOCX files
-  if (filename.endsWith('.docx')) {
-    await processDocxFile(download);
-  }
-  // Handle Markdown files
-  else if (filename.endsWith('.md') || filename.endsWith('.markdown')) {
-    await processMarkdownFile(download);
+async function sendMessageToActiveTab(action, payload) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs.length) return;
+
+    await chrome.tabs.sendMessage(tabs[0].id, {
+      action,
+      ...payload
+    });
+  } catch (error) {
+    console.error('Error sending message to content script:', error);
   }
 }
 
+async function processDownload(downloadId) {
+  const downloads = await chrome.downloads.search({ id: downloadId });
+  if (!downloads.length) return;
+
+  const download = downloads[0];
+  const filename = download.filename.toLowerCase();
+  
+  // File type handlers
+  // We will handle markdown like html, since they are interoperable (to a point)
+  const fileHandlers = {
+    '.docx': processDocxFile,
+    '.md': processMarkdownFile,
+    '.markdown': processMarkdownFile
+  };
+
+  const extension = filename.substring(filename.lastIndexOf('.'));
+  const handler = fileHandlers[extension];
+  if (!handler) throw new Error(`No handler for file type: ${extension}`);
+  
+  await handler(download);
+}
+
+// docx file processing
 async function processDocxFile(download) {
   // fetch and stringify (actual blob was getting dropped on message to viewer.js)
-  const response = await fetch(`file://${download.filename}`);
+  const response = await fetch(`file://${download.filename}`); // background scripts let us do cool stuff like this
   const blob = await response.blob();
   
   // Validate and correct the DOCX file
+  // Some DOCX files are generate with little to no style info or a poor schema,
+  // here we try to fill in the blanks.
   let correctedBlob = blob;
   try {
     console.log('Validating and correcting DOCX file...');
@@ -147,6 +179,7 @@ async function processDocxFile(download) {
     // Continue with original blob if validation fails
   }
   
+  // convert to b64, actual blobs were getting dropped on message to content script
   const base64Data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result.split(',')[1]);
@@ -154,51 +187,33 @@ async function processDocxFile(download) {
     reader.readAsDataURL(correctedBlob);
   });
   
-  // Get the active tab and send message to content script
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tabs.length === 0) return;
-  
   // Send message to content script to display modal
-  chrome.tabs.sendMessage(tabs[0].id, {
-    action: 'displayFile',
+  await sendMessageToActiveTab('displayDOCX', {
     data: {
       filename: download.filename,
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       fileSize: correctedBlob.size,
       base64Data
     }
-  }).catch(error => {
-    console.error('Error sending message to content script:', error);
   });
 }
 
 async function processMarkdownFile(download) {
-  try {
-    // Fetch the markdown file content
-    const response = await fetch(`file://${download.filename}`);
-    const markdownText = await response.text();
-    
-    // Convert markdown to HTML
-    const htmlContent = markdownToHtml(markdownText);
-    
-    // Get the active tab and send message to content script
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tabs.length === 0) return;
-    
-    // Send message to content script with HTML content
-    chrome.tabs.sendMessage(tabs[0].id, {
-      action: 'displayMarkdown',
-      data: {
-        filename: download.filename,
-        htmlContent: htmlContent,
-        originalMarkdown: markdownText
-      }
-    }).catch(error => {
-      console.error('Error sending message to content script:', error);
-    });
-  } catch (error) {
-    console.error('Error processing markdown file:', error);
-  }
+  // Fetch the markdown file content
+  const response = await fetch(`file://${download.filename}`);
+  const markdownText = await response.text();
+  
+  // Convert markdown to HTML
+  const htmlContent = markdownToHtml(markdownText);
+  
+  // Send message to content script with HTML content
+  await sendMessageToActiveTab('displayMarkdown', {
+    data: {
+      filename: download.filename,
+      htmlContent: htmlContent,
+      originalMarkdown: markdownText
+    }
+  });
 }
 
 // Simple markdown to HTML converter
@@ -211,12 +226,12 @@ function markdownToHtml(markdown) {
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
   
   // Bold
-  html = html.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>');
+  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
   html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>');
   
   // Italic
   html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
-  html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+  html = html.replace(/_(.+?)_/gim, '<em>$1</em>');
   
   // Code blocks
   html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
@@ -243,9 +258,6 @@ function markdownToHtml(markdown) {
   html = html.replace(/\n\n/gim, '</p><p>');
   html = html.replace(/\n/gim, '<br>');
   
-  // Wrap in paragraphs
-  html = '<p>' + html + '</p>';
-  
   // Clean up empty paragraphs
   html = html.replace(/<p><\/p>/gim, '');
   html = html.replace(/<p>(<h[1-6]>)/gim, '$1');
@@ -254,6 +266,9 @@ function markdownToHtml(markdown) {
   html = html.replace(/(<\/ul>)<\/p>/gim, '$1');
   html = html.replace(/<p>(<pre>)/gim, '$1');
   html = html.replace(/(<\/pre>)<\/p>/gim, '$1');
+  
+  // Wrap in paragraphs
+  html = '<p>' + html + '</p>';
   
   return html;
 }

@@ -1,3 +1,4 @@
+// for compiling docx-validator.js into a web worker bundle
 const path = require('path');
 
 module.exports = {

@@ -2,6 +2,8 @@ let superdoc = null;
 let currentFileData = null;
 let modalContainer = null;
 
+const ID_PREFIX = 'superdoc-anywhere-extension__';
+
 // Load modal HTML from file
 async function loadModalHTML() {
   try {
@@ -18,20 +20,20 @@ async function loadModalHTML() {
 
 // Inject CSS for modal
 function injectModalCSS() {
-  if (document.getElementById('superdoc-anywhere-extension__modal-css')) return;
+  if (document.getElementById(`${ID_PREFIX}modal-css`)) return;
   
   const style = document.createElement('style');
-  style.id = 'superdoc-anywhere-extension__modal-css';
+  style.id = `${ID_PREFIX}modal-css`;
   style.textContent = `
-    #superdoc-anywhere-extension__modal * {
+    #${ID_PREFIX}modal * {
       box-sizing: border-box;
     }
     
-    #superdoc-anywhere-extension__download-btn:hover {
+    #${ID_PREFIX}download-btn:hover {
       background: #0056b3 !important;
     }
     
-    #superdoc-anywhere-extension__close-btn:hover {
+    #${ID_PREFIX}close-btn:hover {
       background: #545b62 !important;
     }
   `;
@@ -40,23 +42,15 @@ function injectModalCSS() {
 
 // Load SuperDoc library (should already be loaded via content script)
 async function loadSuperDoc() {
-  try {
-    // Load CSS
-    const cssLink = document.createElement('link');
-    cssLink.rel = 'stylesheet';
-    cssLink.href = chrome.runtime.getURL('lib/style.css');
-    document.head.appendChild(cssLink);
-    
-    // Check if SuperDoc library is available
-    if (window.SuperDocLibrary) {
-      return [true, null];
-    } else {
-      return [false, new Error('SuperDocLibrary not found - should be loaded via content script')];
-    }
-    
-  } catch (error) {
-    console.error('Error loading SuperDoc:', error);
-    return [false, error];
+  // Load CSS
+  const cssLink = document.createElement('link');
+  cssLink.rel = 'stylesheet';
+  cssLink.href = chrome.runtime.getURL('lib/style.css');
+  document.head.appendChild(cssLink);
+  
+  // Check if SuperDoc library is available
+  if (!window.SuperDocLibrary) {
+    throw new Error('SuperDocLibrary not found - should be loaded via content script');
   }
 }
 
@@ -84,7 +78,7 @@ async function createModal() {
   modalContainer = div.firstElementChild;
   
   // Set the logo source after loading the HTML
-  const logoImg = modalContainer.querySelector('#superdoc-anywhere-extension__logo');
+  const logoImg = modalContainer.querySelector(`#${ID_PREFIX}logo`);
   if (logoImg) {
     // Try to get the page's favicon from gstatic first
     const currentDomain = window.location.hostname;
@@ -99,7 +93,7 @@ async function createModal() {
   }
   
   // Set the document title
-  const titleElement = modalContainer.querySelector('#superdoc-anywhere-extension__document-title');
+  const titleElement = modalContainer.querySelector(`#${ID_PREFIX}document-title`);
   if (titleElement && currentFileData) {
     const filename = currentFileData.filename.split('/').pop(); // Get just the filename
     const title = filename.replace(/\.[^/.]+$/, ""); // Remove file extension
@@ -109,11 +103,11 @@ async function createModal() {
   document.body.appendChild(modalContainer);
   
   // Setup event listeners
-  const closeBtn = modalContainer.querySelector('#superdoc-anywhere-extension__close-btn');
-  const downloadBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-btn');
-  const downloadDropdown = modalContainer.querySelector('#superdoc-anywhere-extension__download-dropdown');
-  const downloadMarkdownBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-markdown');
-  const downloadHtmlBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-html');
+  const closeBtn = modalContainer.querySelector(`#${ID_PREFIX}close-btn`);
+  const downloadBtn = modalContainer.querySelector(`#${ID_PREFIX}download-btn`);
+  const downloadDropdown = modalContainer.querySelector(`#${ID_PREFIX}download-dropdown`);
+  const downloadMarkdownBtn = modalContainer.querySelector(`#${ID_PREFIX}download-markdown`);
+  const downloadHtmlBtn = modalContainer.querySelector(`#${ID_PREFIX}download-html`);
   
   closeBtn.addEventListener('click', closeModal);
   downloadBtn.addEventListener('click', handleDownloadClick);
@@ -122,7 +116,7 @@ async function createModal() {
   
   // Close dropdown when clicking outside
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('#superdoc-anywhere-extension__download-wrapper')) {
+    if (!e.target.closest(`#${ID_PREFIX}download-wrapper`)) {
       downloadDropdown.style.display = 'none';
     }
   });
@@ -146,26 +140,26 @@ async function createModal() {
 
 // Close modal
 function closeModal() {
-  if (modalContainer) {
-    superdoc = null;
+  if (!modalContainer) return;
+  
+  superdoc = null;
 
-    // Remove modal from DOM completely
-    modalContainer.remove();
-    modalContainer = null;
-    currentFileData = null;
-  }
+  // Remove modal from DOM completely
+  modalContainer.remove();
+  modalContainer = null;
+  currentFileData = null;
 }
 
 // Show modal
 function showModal() {
-  if (modalContainer) {
-    modalContainer.style.display = 'flex';
-  }
+  if (!modalContainer) return;
+  
+  modalContainer.style.display = 'flex';
 }
 
 
 // Initialize SuperDoc in modal
-async function initSuperdoc(data) {
+async function initSuperdocWithDOCX(data) {
   console.log('Initializing SuperDoc in modal');
   
   try {
@@ -180,8 +174,8 @@ async function initSuperdoc(data) {
     const superdocFile = await SuperDocLibrary.getFileObject(fileUrl, data.filename, data.mimeType);
     
     const config = {
-      selector: '#superdoc-anywhere-extension__docx-viewer',
-      toolbar: '#superdoc-anywhere-extension__toolbar',
+      selector: `#${ID_PREFIX}docx-viewer`,
+      toolbar: `#${ID_PREFIX}toolbar`,
       documentMode: 'editing',
       pagination: true,
       rulers: true,
@@ -192,7 +186,7 @@ async function initSuperdoc(data) {
     
     superdoc = new SuperDocLibrary.SuperDoc(config);
     // unhide selector
-    const viewerElement = modalContainer.querySelector('#superdoc-anywhere-extension__docx-viewer');
+    const viewerElement = modalContainer.querySelector(`#${ID_PREFIX}docx-viewer`);
     if (viewerElement) {
       viewerElement.style.display = 'flex';
     }
@@ -206,15 +200,9 @@ async function initSuperdoc(data) {
 
 // Handle download button click - shows dropdown for markdown files, downloads directly for others
 async function handleDownloadClick() {
-  const markdownViewer = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
-  const docxViewer = document.getElementById('superdoc-anywhere-extension__docx-viewer');
-  const downloadDropdown = document.getElementById('superdoc-anywhere-extension__download-dropdown');
-  
-  // Check if this is a DOCX file - download directly without dropdown
-  if (docxViewer && docxViewer.style.display !== 'none') {
-    await downloadCurrentFile();
-    return;
-  }
+  const markdownViewer = document.getElementById(`${ID_PREFIX}markdown-viewer`);
+  const docxViewer = document.getElementById(`${ID_PREFIX}docx-viewer`);
+  const downloadDropdown = document.getElementById(`${ID_PREFIX}download-dropdown`);
   
   // Check if this is a markdown file
   if (markdownViewer && markdownViewer.style.display !== 'none') {
@@ -235,10 +223,8 @@ async function downloadCurrentFile() {
   }
 
   try {
-    console.log('SuperDoc instance:', superdoc);
-    
     // Check if this is a markdown file by looking at the viewer element
-    const markdownViewer = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+    const markdownViewer = document.getElementById(`${ID_PREFIX}markdown-viewer`);
     if (markdownViewer && markdownViewer.style.display !== 'none') {
       // This is a markdown file - use exportMarkdown
       await exportMarkdown();
@@ -257,7 +243,6 @@ async function downloadCurrentFile() {
       reader.readAsDataURL(docxBlob);
     });
 
-    // Use Chrome downloads API instead of download link to prevent extension trigger
     let fileName = currentFileData.filename;
     if (fileName.includes('/') || fileName.includes('\\')) {
       fileName = fileName.split('/').pop().split('\\').pop();
@@ -282,7 +267,7 @@ async function downloadCurrentFile() {
 
 // Show fallback content
 function showFallback(data) {
-  const container = modalContainer.querySelector('#superdoc-anywhere-extension__viewer');
+  const container = modalContainer.querySelector(`#${ID_PREFIX}viewer`);
   const bytes = data.fileSize;
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -332,7 +317,7 @@ async function initSuperdocWithHTML(data) {
     
     
     const config = {
-      selector: '#superdoc-anywhere-extension__markdown-viewer',
+      selector: `#${ID_PREFIX}markdown-viewer`,
       documentMode: 'editing',
       pagination: true,
       rulers: true,
@@ -346,13 +331,13 @@ async function initSuperdocWithHTML(data) {
     superdoc = new SuperDocLibrary.Editor(config);
     superdoc.converter = new SuperDocLibrary.SuperConverter();
     // unhide selector
-    const viewerElement = modalContainer.querySelector('#superdoc-anywhere-extension__markdown-viewer');
+    const viewerElement = modalContainer.querySelector(`#${ID_PREFIX}markdown-viewer`);
     if (viewerElement) {
       viewerElement.style.display = 'flex';
     }
     console.log('SuperDoc initialized with HTML content');
 
-    const toolbar = new SuperDocLibrary.SuperToolbar({ element: 'superdoc-anywhere-extension__toolbar', editor: superdoc, isDev: true, pagination: true, });
+    const toolbar = new SuperDocLibrary.SuperToolbar({ element: `${ID_PREFIX}toolbar`, editor: superdoc, isDev: true, pagination: true, });
     
   } catch (error) {
     console.error('Error initializing SuperDoc with HTML:', error.message);
@@ -362,7 +347,7 @@ async function initSuperdocWithHTML(data) {
 
 // Show fallback content for markdown files
 function showMarkdownFallback(data) {
-  const container = modalContainer.querySelector('#superdoc-anywhere-extension__viewer');
+  const container = modalContainer.querySelector(`#${ID_PREFIX}viewer`);
   
   container.innerHTML = `
     <div style="padding: 20px; font-family: system-ui, -apple-system, sans-serif; max-height: 500px; overflow-y: auto;">
@@ -381,55 +366,65 @@ async function handleCaptureSelectedHTML(request, sendResponse) {
   
   // Get the current selection
   const selection = window.getSelection();
-  if (selection && selection.rangeCount > 0) {
-    try {
-      // Get the range of the selection
-      const range = selection.getRangeAt(0);
-      
-      // Extract the HTML content of the selection
-      const tempDiv = document.createElement('div');
-      tempDiv.appendChild(range.cloneContents());
-      const htmlContent = tempDiv.innerHTML;
-      
-      console.log('Captured HTML:', htmlContent);
-      
-      // Create data object similar to markdown processing
-      const currentDomain = window.location.hostname;
-      const data = {
-        filename: `Selected content from ${currentDomain}.html`,
-        htmlContent: htmlContent,
-        originalSource: 'webpage_selection'
-      };
-      
-      // Store as current file data
-      currentFileData = data;
-      
-      // Load SuperDoc library
-      await loadSuperDoc();
-      
-      // Create and show modal
-      await createModal();
-      showModal();
-      
-      // Initialize SuperDoc with HTML content
-      await initSuperdocWithHTML(data);
-      
-      sendResponse({ success: true });
-    } catch (error) {
-      console.error('Error capturing HTML:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-  } else {
+  if (!selection?.rangeCount) {
     console.error('No selection found');
     alert('No selection found.');
     sendResponse({ success: false, error: 'No selection found' });
+    return;
+  }
+
+  try {
+    // Get the range of the selection
+    const range = selection.getRangeAt(0);
+    
+    // Extract the HTML content of the selection
+    const tempDiv = document.createElement('div');
+    tempDiv.appendChild(range.cloneContents());
+    const htmlContent = tempDiv.innerHTML;
+    
+    // Create data object similar to markdown processing
+    const currentDomain = window.location.hostname;
+    const data = {
+      filename: `Selected content from ${currentDomain}.html`,
+      htmlContent: htmlContent,
+      originalSource: 'webpage_selection'
+    };
+
+    // Store as current file data
+    currentFileData = data;
+
+    // Load SuperDoc library
+    await loadSuperDoc();
+    
+    // Create and show modal
+    await createModal();
+    showModal();
+    
+    // Initialize SuperDoc with HTML content
+    await initSuperdocWithHTML(data);
+
+    // respond to background script
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error('Error capturing HTML:', error);
+    sendResponse({ success: false, error: error.message });
   }
   
   return true;
 }
 
-// Handle DOCX files
-async function handleDisplayFile(request, sendResponse) {
+/**
+ * Handles displaying DOCX files in the SuperDoc viewer
+ * @param {Object} request - The request object
+ * @param {Object} request.data - The file data
+ * @param {string} request.data.base64Data - Base64 encoded DOCX file data
+ * @param {string} request.data.filename - The filename of the DOCX file
+ * @param {string} request.data.mimeType - MIME type of the file
+ * @param {number} request.data.fileSize - Size of the file in bytes
+ * @param {Function} sendResponse - Callback function to send response
+ * @returns {boolean} Returns true to keep message channel open
+ */
+async function handledisplayDOCX(request, sendResponse) {
   if (!request.data.base64Data) return false;
   
   console.log('Received DOCX file data from background, displaying in modal');
@@ -444,23 +439,29 @@ async function handleDisplayFile(request, sendResponse) {
   currentFileData = data;
   
   // Load SuperDoc library
-  const [superdocLoaded, loadError] = await loadSuperDoc();
-  if (!superdocLoaded) {
-    console.error('Failed to load SuperDoc library:', loadError);
-  }
-  
+  await loadSuperDoc();
+
   // Create and show modal
   await createModal();
   showModal();
   
   // Initialize SuperDoc
-  await initSuperdoc(data);
+  await initSuperdocWithDOCX(data);
   
   sendResponse({ success: true });
   return true;
 }
 
-// Handle Markdown files
+/**
+ * Handles displaying markdown files in the SuperDoc viewer
+ * @param {Object} request - The request object
+ * @param {Object} request.data - The file data
+ * @param {string} request.data.htmlContent - HTML content converted from markdown
+ * @param {string} request.data.filename - The filename of the markdown file
+ * @param {string} [request.data.originalSource] - Original source of the content
+ * @param {Function} sendResponse - Callback function to send response
+ * @returns {boolean} Returns true to keep message channel open
+ */
 async function handleDisplayMarkdown(request, sendResponse) {
   if (!request.data.htmlContent) return false;
   
@@ -469,11 +470,8 @@ async function handleDisplayMarkdown(request, sendResponse) {
   currentFileData = request.data;
   
   // Load SuperDoc library
-  const [superdocLoaded, loadError] = await loadSuperDoc();
-  if (!superdocLoaded) {
-    console.error('Failed to load SuperDoc library:', loadError);
-  }
-  
+  await loadSuperDoc();
+
   // Create and show modal
   await createModal();
   showModal();
@@ -488,13 +486,13 @@ async function handleDisplayMarkdown(request, sendResponse) {
 // Action to handler mapping
 const messageHandlers = {
   'captureSelectedHTML': handleCaptureSelectedHTML,
-  'displayFile': handleDisplayFile,
+  'displayDOCX': handledisplayDOCX,
   'displayMarkdown': handleDisplayMarkdown
 };
 
 // Export markdown from SuperDoc editor
 async function exportMarkdown() {
-  const viewerElement = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+  const viewerElement = document.getElementById(`${ID_PREFIX}markdown-viewer`);
   if (!viewerElement) {
     console.error('Markdown viewer element not found');
     return;
@@ -527,25 +525,16 @@ async function exportMarkdown() {
       reader.readAsDataURL(blob);
     });
     
-
-    console.log('Markdown data payload:', {
-      action: 'downloadFile',
-      url: dataUrl,
-      filename: markdownFilename
-    });
-
     const response = await chrome.runtime.sendMessage({
       action: 'downloadFile',
       url: dataUrl,
       filename: markdownFilename
     });
 
-    console.log('Response from downloadFile:', response);
-    
     if (response?.success) {
       console.log('Markdown file downloaded:', markdownFilename);
       // Hide dropdown after successful download
-      const downloadDropdown = document.getElementById('superdoc-anywhere-extension__download-dropdown');
+      const downloadDropdown = document.getElementById(`${ID_PREFIX}download-dropdown`);
       downloadDropdown.style.display = 'none';
     } else {
       throw new Error(response?.error || 'Download failed');
@@ -609,14 +598,6 @@ function htmlToMarkdown(html) {
     }).join('\n') + '\n\n';
   });
   
-  // Convert links
-  html = html.replace(/<a[^>]*href=['"]([^'"]*)['"][^>]*>(.*?)<\/a>/gi, '[$2]($1)');
-  
-  // Convert images
-  html = html.replace(/<img[^>]*src=['"]([^'"]*)['"][^>]*alt=['"]([^'"]*)['"][^>]*>/gi, '![$2]($1)');
-  html = html.replace(/<img[^>]*alt=['"]([^'"]*)['"][^>]*src=['"]([^'"]*)['"][^>]*>/gi, '![$1]($2)');
-  html = html.replace(/<img[^>]*src=['"]([^'"]*)['"][^>]*>/gi, '![]($1)');
-  
   // Remove remaining HTML tags
   html = html.replace(/<[^>]*>/g, '');
   
@@ -629,7 +610,7 @@ function htmlToMarkdown(html) {
 
 // Export HTML from SuperDoc editor
 async function exportHTML() {
-  const viewerElement = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+  const viewerElement = document.getElementById(`${ID_PREFIX}markdown-viewer`);
   if (!viewerElement) {
     console.error('Markdown viewer element not found');
     return;
@@ -719,7 +700,7 @@ async function exportHTML() {
     if (response?.success) {
       console.log('HTML file downloaded:', htmlFilename);
       // Hide dropdown after successful download
-      const downloadDropdown = document.getElementById('superdoc-anywhere-extension__download-dropdown');
+      const downloadDropdown = document.getElementById(`${ID_PREFIX}download-dropdown`);
       downloadDropdown.style.display = 'none';
     } else {
       throw new Error(response?.error || 'Download failed');
