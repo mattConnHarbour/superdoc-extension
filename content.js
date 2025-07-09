@@ -111,10 +111,22 @@ async function createModal() {
   // Setup event listeners
   const closeBtn = modalContainer.querySelector('#superdoc-anywhere-extension__close-btn');
   const downloadBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-btn');
+  const downloadDropdown = modalContainer.querySelector('#superdoc-anywhere-extension__download-dropdown');
+  const downloadMarkdownBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-markdown');
+  const downloadHtmlBtn = modalContainer.querySelector('#superdoc-anywhere-extension__download-html');
   
   closeBtn.addEventListener('click', closeModal);
-  downloadBtn.addEventListener('click', downloadCurrentFile);
+  downloadBtn.addEventListener('click', handleDownloadClick);
+  downloadMarkdownBtn.addEventListener('click', () => exportMarkdown());
+  downloadHtmlBtn.addEventListener('click', () => exportHTML());
   
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#superdoc-anywhere-extension__download-wrapper')) {
+      downloadDropdown.style.display = 'none';
+    }
+  });
+
   // Close on background click
   modalContainer.addEventListener('click', (e) => {
     if (e.target === modalContainer) {
@@ -192,6 +204,29 @@ async function initSuperdoc(data) {
   }
 }
 
+// Handle download button click - shows dropdown for markdown files, downloads directly for others
+async function handleDownloadClick() {
+  const markdownViewer = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+  const docxViewer = document.getElementById('superdoc-anywhere-extension__docx-viewer');
+  const downloadDropdown = document.getElementById('superdoc-anywhere-extension__download-dropdown');
+  
+  // Check if this is a DOCX file - download directly without dropdown
+  if (docxViewer && docxViewer.style.display !== 'none') {
+    await downloadCurrentFile();
+    return;
+  }
+  
+  // Check if this is a markdown file
+  if (markdownViewer && markdownViewer.style.display !== 'none') {
+    // Show dropdown for markdown files
+    const isVisible = downloadDropdown.style.display === 'block';
+    downloadDropdown.style.display = isVisible ? 'none' : 'block';
+  } else {
+    // Download directly for other files
+    await downloadCurrentFile();
+  }
+}
+
 // Download current file
 async function downloadCurrentFile() {
   if (!currentFileData) {
@@ -201,7 +236,16 @@ async function downloadCurrentFile() {
 
   try {
     console.log('SuperDoc instance:', superdoc);
-    // Export the current document from SuperDoc editor
+    
+    // Check if this is a markdown file by looking at the viewer element
+    const markdownViewer = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+    if (markdownViewer && markdownViewer.style.display !== 'none') {
+      // This is a markdown file - use exportMarkdown
+      await exportMarkdown();
+      return;
+    }
+    
+    // Export the current document from SuperDoc editor (DOCX files)
     const blobToDownload = await superdoc.activeEditor.exportDocx();
 
     // Convert blob to data URL for Chrome downloads API with correct MIME type
@@ -300,6 +344,7 @@ async function initSuperdocWithHTML(data) {
     };
     
     superdoc = new SuperDocLibrary.Editor(config);
+    superdoc.converter = new SuperDocLibrary.SuperConverter();
     // unhide selector
     const viewerElement = modalContainer.querySelector('#superdoc-anywhere-extension__markdown-viewer');
     if (viewerElement) {
@@ -307,9 +352,7 @@ async function initSuperdocWithHTML(data) {
     }
     console.log('SuperDoc initialized with HTML content');
 
-    // TODO - toolbar
-
-    // const toolbar = new SuperDocLibrary.SuperToolbar({ element: 'superdoc-anywhere-extension__toolbar', editor: superdoc, isDev: true, pagination: true, });
+    const toolbar = new SuperDocLibrary.SuperToolbar({ element: 'superdoc-anywhere-extension__toolbar', editor: superdoc, isDev: true, pagination: true, });
     
   } catch (error) {
     console.error('Error initializing SuperDoc with HTML:', error.message);
@@ -448,6 +491,243 @@ const messageHandlers = {
   'displayFile': handleDisplayFile,
   'displayMarkdown': handleDisplayMarkdown
 };
+
+// Export markdown from SuperDoc editor
+async function exportMarkdown() {
+  const viewerElement = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+  if (!viewerElement) {
+    console.error('Markdown viewer element not found');
+    return;
+  }
+  
+  const htmlContent = viewerElement.innerHTML;
+  if (!htmlContent) {
+    console.error('No HTML content found in markdown viewer');
+    return;
+  }
+  
+  // Convert HTML to markdown
+  const markdownContent = htmlToMarkdown(htmlContent);
+  
+  // Create and download markdown file
+  const blob = new Blob([markdownContent], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  
+  // Generate filename
+  const filename = currentFileData?.filename || 'document';
+  const baseName = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+  const cleanBaseName = baseName.split('/').pop().split('\\').pop(); // Remove path
+  const markdownFilename = `${cleanBaseName}.md`;
+  
+  // Download using Chrome downloads API
+  try {
+    const dataUrl = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+    
+
+    console.log('Markdown data payload:', {
+      action: 'downloadFile',
+      url: dataUrl,
+      filename: markdownFilename
+    });
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'downloadFile',
+      url: dataUrl,
+      filename: markdownFilename
+    });
+
+    console.log('Response from downloadFile:', response);
+    
+    if (response?.success) {
+      console.log('Markdown file downloaded:', markdownFilename);
+      // Hide dropdown after successful download
+      const downloadDropdown = document.getElementById('superdoc-anywhere-extension__download-dropdown');
+      downloadDropdown.style.display = 'none';
+    } else {
+      throw new Error(response?.error || 'Download failed');
+    }
+  } catch (error) {
+    console.error('Error downloading markdown:', error);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Convert HTML to markdown
+function htmlToMarkdown(html) {
+  // Remove script and style tags
+  html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  
+  // Convert headings
+  html = html.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n');
+  html = html.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
+  html = html.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
+  html = html.replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1\n\n');
+  html = html.replace(/<h5[^>]*>(.*?)<\/h5>/gi, '##### $1\n\n');
+  html = html.replace(/<h6[^>]*>(.*?)<\/h6>/gi, '###### $1\n\n');
+  
+  // Convert paragraphs
+  html = html.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n');
+  
+  // Convert line breaks
+  html = html.replace(/<br\s*\/?>/gi, '\n');
+  
+  // Convert bold and italic
+  html = html.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**');
+  html = html.replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**');
+  html = html.replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*');
+  html = html.replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*');
+  
+  // Convert code
+  html = html.replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`');
+  html = html.replace(/<pre[^>]*>(.*?)<\/pre>/gi, '```\n$1\n```\n\n');
+  
+  // Convert blockquotes
+  html = html.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, (_, content) => {
+    return content.split('\n').map(line => `> ${line}`).join('\n') + '\n\n';
+  });
+  
+  // Convert lists
+  html = html.replace(/<ul[^>]*>(.*?)<\/ul>/gi, (_, content) => {
+    const items = content.match(/<li[^>]*>(.*?)<\/li>/gi) || [];
+    return items.map(item => {
+      const text = item.replace(/<\/?li[^>]*>/gi, '').trim();
+      return `- ${text}`;
+    }).join('\n') + '\n\n';
+  });
+  
+  html = html.replace(/<ol[^>]*>(.*?)<\/ol>/gi, (_, content) => {
+    const items = content.match(/<li[^>]*>(.*?)<\/li>/gi) || [];
+    return items.map((item, index) => {
+      const text = item.replace(/<\/?li[^>]*>/gi, '').trim();
+      return `${index + 1}. ${text}`;
+    }).join('\n') + '\n\n';
+  });
+  
+  // Convert links
+  html = html.replace(/<a[^>]*href=['"]([^'"]*)['"][^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+  
+  // Convert images
+  html = html.replace(/<img[^>]*src=['"]([^'"]*)['"][^>]*alt=['"]([^'"]*)['"][^>]*>/gi, '![$2]($1)');
+  html = html.replace(/<img[^>]*alt=['"]([^'"]*)['"][^>]*src=['"]([^'"]*)['"][^>]*>/gi, '![$1]($2)');
+  html = html.replace(/<img[^>]*src=['"]([^'"]*)['"][^>]*>/gi, '![]($1)');
+  
+  // Remove remaining HTML tags
+  html = html.replace(/<[^>]*>/g, '');
+  
+  // Clean up whitespace
+  html = html.replace(/\n\s*\n\s*\n/g, '\n\n'); // Multiple newlines to double
+  html = html.replace(/^\s+|\s+$/g, ''); // Trim
+  
+  return html;
+}
+
+// Export HTML from SuperDoc editor
+async function exportHTML() {
+  const viewerElement = document.getElementById('superdoc-anywhere-extension__markdown-viewer');
+  if (!viewerElement) {
+    console.error('Markdown viewer element not found');
+    return;
+  }
+  
+  let htmlContent = viewerElement.innerHTML;
+  if (!htmlContent) {
+    console.error('No HTML content found in markdown viewer');
+    return;
+  }
+  
+  // Create a complete HTML document
+  const completeHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${currentFileData?.filename || 'Document'}</title>
+  <style>
+    body { 
+      font-family: system-ui, -apple-system, sans-serif; 
+      margin: 40px; 
+      line-height: 1.6; 
+      color: #333;
+    }
+    h1, h2, h3, h4, h5, h6 { color: #2c3e50; }
+    code { 
+      background: #f4f4f4; 
+      padding: 2px 4px; 
+      border-radius: 3px; 
+      font-family: 'Courier New', monospace;
+    }
+    pre { 
+      background: #f4f4f4; 
+      padding: 15px; 
+      border-radius: 5px; 
+      overflow-x: auto; 
+      border-left: 4px solid #3498db;
+    }
+    blockquote { 
+      border-left: 4px solid #ddd; 
+      margin: 0; 
+      padding-left: 20px; 
+      color: #666;
+    }
+    table { 
+      border-collapse: collapse; 
+      width: 100%; 
+      margin: 20px 0;
+    }
+    th, td { 
+      border: 1px solid #ddd; 
+      padding: 8px; 
+      text-align: left;
+    }
+    th { background-color: #f2f2f2; }
+  </style>
+</head>
+<body>
+  ${htmlContent}
+</body>
+</html>`;
+  
+  // Create and download HTML file
+  const blob = new Blob([completeHTML], { type: 'text/html' });
+  
+  // Generate filename
+  const filename = currentFileData?.filename || 'document';
+  const baseName = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+  const cleanBaseName = baseName.split('/').pop().split('\\').pop(); // Remove path
+  const htmlFilename = `${cleanBaseName}.html`;
+  
+  // Download using Chrome downloads API
+  try {
+    const dataUrl = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+    
+    const response = await chrome.runtime.sendMessage({
+      action: 'downloadFile',
+      url: dataUrl,
+      filename: htmlFilename
+    });
+    
+    if (response?.success) {
+      console.log('HTML file downloaded:', htmlFilename);
+      // Hide dropdown after successful download
+      const downloadDropdown = document.getElementById('superdoc-anywhere-extension__download-dropdown');
+      downloadDropdown.style.display = 'none';
+    } else {
+      throw new Error(response?.error || 'Download failed');
+    }
+  } catch (error) {
+    console.error('Error downloading HTML:', error);
+  }
+}
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener(async (request, _, sendResponse) => {

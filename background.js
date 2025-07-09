@@ -67,10 +67,11 @@ const messageHandlers = {
 };
 
 // Listen for messages
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handler = messageHandlers[request.action];
   if (handler) {
-    return await handler(request, sender, sendResponse);
+    handler(request, sender, sendResponse);
+    return true; // Keep message channel open for async response
   }
 });
 
